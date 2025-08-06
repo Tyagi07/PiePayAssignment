@@ -8,6 +8,7 @@ import {
   Dimensions,
   Pressable,
   Modal,
+  BackHandler,
 } from 'react-native';
 import WebView from 'react-native-webview';
 
@@ -15,19 +16,49 @@ const windowWidth = Dimensions.get('window').width;
 const itemsPerRow = 4;
 const circleSize = windowWidth * 0.2; // 20% of width
 
-const EcomTile = ({ merchant, onPress }) => {
+// Fallback images for broken URLs
+const FALLBACK_IMAGES = {
+  flipkart: 'https://logos-world.net/wp-content/uploads/2020/11/Flipkart-Logo.png',
+  mobiles: 'https://img.icons8.com/color/96/smartphone.png',
+  fashion: 'https://img.icons8.com/color/96/clothes.png',
+  electronics: 'https://img.icons8.com/color/96/laptop.png',
+  home: 'https://img.icons8.com/color/96/home.png',
+  beauty: 'https://img.icons8.com/color/96/cosmetics.png',
+  toys: 'https://img.icons8.com/color/96/teddy-bear.png',
+};
+
+const EcomTile = React.memo(({ merchant, onPress }) => {
   const { name, categories, logoUrl } = merchant;
 
-  if (categories && categories.length && !categories._mutated) {
-    categories.push({
-      title: 'More',
-      imageUrl: 'https://img.icons8.com/fluency/96/000000/more.png',
-    });
-  }
+  // FIX: Prevent array mutation 
+  const safeCategories = React.useMemo(() => {
+    const cats = [...categories];
+    if (cats.length > 0) {
+      cats.push({
+        title: 'More',
+        imageUrl: 'https://img.icons8.com/color/96/000000/more.png',
+      });
+    }
+    return cats;
+  }, [categories]);
+  
   // Limit to two rows by default, allow expand/collapse
   const [expanded, setExpanded] = useState(false);
+  const [webUri, setWebUri] = useState(null);
 
-  const visibleCategories = expanded ? categories : categories.slice(0, 7);
+  //FIX: Android back button handler
+  React.useEffect(()=>{
+    const backHandler = BackHandler.addEventListener('hardwareBackPress',()=>{
+      if (webUri){
+        setWebUri(null);
+        return true; // Prevent default behavior
+      }
+      return false;
+    });
+    return () => backHandler.remove();
+  }, [webUri]);
+
+  const visibleCategories = expanded ? safeCategories : safeCategories.slice(0, 7);
 
   const rows = [];
   for (let i = 0; i < visibleCategories.length; i += itemsPerRow) {
@@ -35,13 +66,31 @@ const EcomTile = ({ merchant, onPress }) => {
   }
 
   const handleToggle = () => setExpanded(!expanded);
-  const [webUri, setWebUri] = useState(null);
+
+  //Fix: Image with fallback
+  const ImageWithFallback = ({ uri, style, fallbackKey }) => {
+    const [imageSource, setImageSource] = useState({ uri });
+    return (
+      <Image
+      source={imageSource}
+      style={style}
+      onError={()=> {
+        const fallback = FALLBACK_IMAGES[fallbackKey] || FALLBACK_IMAGES.flipkart;
+        setImageSource({ uri: fallback });
+        }}
+      />
+    );
+  };
 
   return (
     <View style={styles.container}>
       <Pressable onPress={onPress}>
         <View style={styles.headerRow}>
-          <Image source={{ uri: logoUrl }} style={styles.logo} />
+          <ImageWithFallback 
+            uri={logoUrl} 
+            style={styles.logo} 
+            fallbackKey="flipkart"
+          />
           <Text style={styles.headerText}>Buy on {name}</Text>
         </View>
       </Pressable>
@@ -63,9 +112,10 @@ const EcomTile = ({ merchant, onPress }) => {
                 setWebUri(cat.productPageUrl);
               }}
             >
-              <Image
-                source={{ uri: cat.imageUrl }}
+              <ImageWithFallback
+                uri={cat.imageUrl}
                 style={styles.categoryImage}
+                fallbackKey={cat.title.toLowerCase()}
               />
               <Text style={styles.categoryTitle}>{cat.title}</Text>
             </Pressable>
@@ -74,7 +124,7 @@ const EcomTile = ({ merchant, onPress }) => {
       ))}
 
       {/* view more / less toggle */}
-      {categories.length > 7 && (
+      {safeCategories.length > 7 && (
         <Pressable onPress={handleToggle} style={styles.viewMoreBtn}>
           <Text style={styles.viewMoreText}>
             {expanded ? 'View less' : 'View more'}
@@ -93,7 +143,7 @@ const EcomTile = ({ merchant, onPress }) => {
       </Modal>
     </View>
   );
-};
+});
 
 export default EcomTile;
 
