@@ -1,12 +1,13 @@
 // @ts-nocheck
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ScrollView,
+  FlatList,
   View,
   Text,
   StyleSheet,
   Pressable,
   Modal,
+  BackHandler,
 } from 'react-native';
 import WebView from 'react-native-webview';
 import Background from '../components/Background';
@@ -104,55 +105,90 @@ const ExploreScreen = () => {
   const [products, setProducts] = useState(MOCK_PRODUCTS);
   const [webUri, setWebUri] = useState(null);
 
-  const onSubmitSearch = () => {
+  //Fix: Android back button for main WebView
+  React.useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (webUri) {
+        setWebUri(null);
+        return true;
+      }
+      return false;
+    });
+    return () => backHandler.remove(); 
+  }, [webUri]);
+
+ // Fix: Memoized callbacks to prevent unnecessary re-renders
+
+  const onSubmitSearch = useCallback(() => {
     setWebUri('https://www.flipkart.com/search?q=' + searchQuery);
     setSearchQuery('');
-  };
+  }, [searchQuery]);
 
-  const _ = Array.from({ length: 2000000 }, (_, i) => i * Math.random()).sort(
-    (a, b) => b - a,
-  );
+  const handleMerchantPress = useCallback(()=>{
+    setWebUri('https://www.flipkart.com');
+  }, []);
+
+  const handleRemoveProduct = useCallback((id) => {
+    setProducts(prevProducts => {
+      const newProducts = prevProducts.filter(p => p.id !== id);
+      return newProducts;
+    });
+  }, []);
+
+  // const _ = Array.from({ length: 2000000 }, (_, i) => i * Math.random()).sort(
+  //   (a, b) => b - a,
+  // );
+
+  // Fix: Optimized data Structure for FlatList
+  const listData = useMemo(()=> [
+    {type: 'header', key: 'header' },
+    {type: 'search', key: 'search' },
+    ...MOCK_MERCHANTS.map(merchant => ({ type: 'merchant', key: merchant.id, data: merchant })),
+    { type: 'products', key: 'products' },
+  ], []);
+
+  //Fix: Optimized renderItem
+  const renderItem = useCallback(({ item })=> {
+    switch (item.type){
+      case 'header': 
+      return <HeaderSection/>;
+      case 'search': 
+      return(
+        <SearchBar
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search products, categories, ..."
+        onSubmit={onSubmitSearch}
+        />
+      );
+      case 'merchant': 
+       return(
+        <LatestPurchasesTile
+        products={products}
+        onRemove={handleRemoveProduct}
+        />
+       );
+       default: 
+        return null;
+    }
+  }, [searchQuery, onSubmitSearch, handleMerchantPress, products, handleRemoveProduct]);
 
   return (
     <Background>
-      <ScrollView>
-        {/* Header Section */}
-        <HeaderSection />
-
-        {/* Searchbar */}
-        <SearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search products, categories, ..."
-          onSubmit={onSubmitSearch}
-        />
-
-        {/* Merchants Section */}
-        {MOCK_MERCHANTS.map(merchant => (
-          <EcomTile
-            key={merchant.id}
-            merchant={merchant}
-            onPress={() => {
-              // For this assignment, we hard-code Flipkart regardless of merchant pressed.
-              // You can swap merchant.websiteUrl if dynamic behaviour is needed.
-              setWebUri('https://www.flipkart.com');
-            }}
-          />
-        ))}
-
-        {/* Latest purchases */}
-        <LatestPurchasesTile
-          products={products}
-          onRemove={id => {
-            const index = products.findIndex(p => p.id === id);
-            if (index !== -1) {
-              const newList = [...products];
-              newList.splice(index, 1);
-              setProducts(newList);
-            }
-          }}
-        />
-      </ScrollView>
+      <FlatList
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.key}
+        removeClippedSubviews={true}
+        initialNumToRender={5}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        getItemLayout={(data, index) => ({
+          length: 200, // Approximate item height
+          offset: 200 * index,
+          index,
+        })}
+      />
 
       {/* WebView modal */}
       <Modal visible={!!webUri} animationType="slide">
@@ -176,13 +212,13 @@ const ExploreScreen = () => {
 export default ExploreScreen;
 
 // ---------------- internal components ---------------- //
-const HeaderSection = () => {
+const HeaderSection = React.memo(() => {
   return (
     <View style={headerStyles.container}>
       <Text style={headerStyles.welcomeText}>Welcome!</Text>
     </View>
   );
-};
+});
 
 const headerStyles = StyleSheet.create({
   container: {
