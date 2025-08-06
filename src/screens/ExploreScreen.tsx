@@ -14,6 +14,7 @@ import Background from '../components/Background';
 import SearchBar from '../components/SearchBar';
 import EcomTile from '../components/EcomTile';
 import LatestPurchasesTile from '../components/LatestPurchasesTile';
+import PiePayBottomSheet from '../components/bottomSheet';
 
 // ---------- mock data ---------- //
 const MOCK_MERCHANTS = [
@@ -104,6 +105,8 @@ const ExploreScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState(MOCK_PRODUCTS);
   const [webUri, setWebUri] = useState(null);
+  const [currentUrl, setCurrentUrl] = useState('');
+  const [showPiePaySheet, setShowPiePaySheet] = useState(false);
 
   //Fix: Android back button for main WebView
   React.useEffect(() => {
@@ -201,10 +204,20 @@ const ExploreScreen = () => {
               // ref={WEBVIEW_REF}
               source={{ uri: webUri }}
               startInLoadingState
+              onNavigationStateChange={(navState)=> {
+                setCurrentUrl(navState.url);
+                const isProductPage = navState.url.includes('flipkart.com') && navState.url.includes('/p/');
+                setShowPiePaySheet(isProductPage);
+              }}
             />
           )}
         </View>
       </Modal>
+      <PiePayBottomSheet
+        url={currentUrl}
+        visible={showPiePaySheet}
+        onClose={()=> setShowPiePaySheet(false)}
+      />
     </Background>
   );
 };
